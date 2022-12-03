@@ -1,4 +1,5 @@
 ﻿using DotNeuralNet;
+using Elastic.Apm;
 using Newport;
 using Newport.Commands;
 using Newport.Controls;
@@ -91,7 +92,32 @@ namespace SimpleOcr.ViewModels
             }
             set
             {
+                if (!value)
+                {
+                    Train();
+                }
+
                 SetProperty(ref _isTraining, value);
+            }
+        }
+
+        private async void Train()
+        {
+            if (_trainingRows.Count > 0)
+            {
+                await Agent.Tracer.CaptureTransaction("Training", "Custom", async t =>
+                {
+                    using (BusyScope())
+                    {
+                        t.SetLabel("nr_of_training_rows", _trainingRows.Count);
+                        await Task.Factory.StartNew(async () =>
+                        {
+                            var trainer = new BackPropagationTrainer(_network);
+                            trainer.Train(_trainingRows, 0.5, 50);
+                            await IsolatedStorageHelper.Save("weights.xml", _network.GetWeights());
+                        });
+                    }
+                });
             }
         }
 
